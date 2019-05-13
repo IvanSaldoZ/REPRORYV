@@ -1,0 +1,9 @@
+ mkdir recycle\  1>>tmp 2>&1                                                                                                                                                                                                                                    
+ copy inp_RECYCLE.dat recycle\inp_RECYCLE.dat  1>>tmp 2>&1                                                                                                                                                                                                      
+ copy inp.dat recycle\inp.dat  1>>tmp 2>&1                                                                                                                                                                                                                      
+ 
+ 
+ 
+ ======================
+ STEP: 1
+ mkdir recycle\1stp\  1>>tmp 2>&1                                                                                                                                                                                                                               

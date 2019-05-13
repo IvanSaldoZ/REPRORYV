@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="RecycleInf" />
+		<Option pch_mode="2" />
+		<Option compiler="gfortran" />
+		<Build>
+			<Target title="Debug">
+				<Option output="../../../JARFR/REPRORYV/RecycleInf" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Debug/" />
+				<Option type="1" />
+				<Option compiler="gfortran" />
+				<Compiler>
+					<Add option="-g" />
+				</Compiler>
+			</Target>
+			<Target title="Release">
+				<Option output="bin/Release/RecycleInf" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Release/" />
+				<Option type="1" />
+				<Option compiler="gfortran" />
+				<Compiler>
+					<Add option="-O2" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+				</Linker>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-Wall" />
+		</Compiler>
+		<Unit filename="Sources/BPSDProcedure.f08">
+			<Option weight="1" />
+		</Unit>
+		<Unit filename="Sources/ConvertCyr.f08">
+			<Option weight="0" />
+		</Unit>
+		<Unit filename="Sources/CopyOldConc.f08">
+			<Option weight="1" />
+		</Unit>
+		<Unit filename="Sources/Crit.f08">
+			<Option weight="1" />
+		</Unit>
+		<Unit filename="Sources/DoRecycle.f08">
+			<Option weight="1" />
+		</Unit>
+		<Unit filename="Sources/FormJARFRisotopicTable.f08">
+			<Option weight="1" />
+		</Unit>
+		<Unit filename="Sources/FormNewInputJARFRFile.f08">
+			<Option weight="1" />
+		</Unit>
+		<Unit filename="Sources/FormReactivityInputJARFRFile.f08">
+			<Option weight="1" />
+		</Unit>
+		<Unit filename="Sources/GetTotalResults.f08">
+			<Option weight="1" />
+		</Unit>
+		<Unit filename="Sources/ReadJARFRInputData.f08">
+			<Option weight="1" />
+		</Unit>
+		<Unit filename="Sources/ReadJARFRResult.f08">
+			<Option weight="1" />
+		</Unit>
+		<Unit filename="Sources/ReadREPRORYVInputData.f08">
+			<Option weight="1" />
+		</Unit>
+		<Unit filename="Sources/functs.f08">
+			<Option weight="1" />
+		</Unit>
+		<Unit filename="Sources/main.f08">
+			<Option weight="1" />
+		</Unit>
+		<Unit filename="Sources/modules.f08">
+			<Option weight="0" />
+		</Unit>
+		<Extensions>
+			<code_completion />
+			<envvars />
+			<debugger />
+			<fortran_project />
+			<wxsmith version="1">
+				<gui name="wxWidgets" src="wxWidgets\ReproryvGUI.cpp" main="-- None --" init_handlers="necessary" language="CPP" />
+			</wxsmith>
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

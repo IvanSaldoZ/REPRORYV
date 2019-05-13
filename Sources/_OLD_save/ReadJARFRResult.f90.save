@@ -1,0 +1,362 @@
+!ОБРАБАТЫВАЕМ ВЫХОДНЫЕ ФАЙЛЫ JARFR
+subroutine ReadJARFRResult(InpFileName)
+    use CommonModJARFR
+    character*180 :: InpFileName
+    write(333, *) '  SAVE RESULTS TO FILES - balance.txt';
+    call SaveAllInfo(InpFileName)
+    write(333, *) '  SAVE RESULTS TO FILES - balance.txt - DONE!';
+end subroutine
+
+
+
+!ЗАНОСИМ ВЫХОДНЫЕ ДАННЫЕ ПО КАЖДОМУ ИЗОТОПУ В ОТДЕЛЬНЫЕ ФАЙЛЫ В ОТДЕЛЬНЫЕ ПАПКИ ПО ШАГАМ
+subroutine SaveAllInfo(InpFileNameIn)
+    use CommonModJARFR
+    character*180 :: InpFileNameIn
+    integer :: NumZonIn !читаем значение зоны, для которой хотим найти данные
+    character*250 :: curFile, curFile_TEMP, curFile_CONC, curFile_CONC_TEMP, curFile_KR, &
+     &  curFile_KV
+    character*250 :: str2
+    character*10 :: Str10
+    character*15 :: str15
+    character*16 :: str16, StrFileDotted
+    character*25 :: str25
+    integer, allocatable :: isot_ids(:)
+    real, allocatable :: conc_in(:)
+    real atomic_mass
+    real krv !коэффициент неравномерности по V
+    real KVcore, KVreactor !коэффициент воспроизводства активной зоны и реактора
+
+    real MassPu239and240, MassPuAll, MassU235, MassU238 !значения масс Pu, U во всем реакторе
+    real zero1,zero2,zero3
+
+
+    !переменные для обработки результатов изотопов
+    integer :: isot_id;
+    real :: isot_nc, isot_nf, isot_mass, isot_alfa, isot_sigma_c, isot_sigma_f
+    real :: zone_volume
+
+    integer :: count_num, is_first, in_counter
+    character*160 :: StrFile1, StrFile2 !строка для чтения файла
+    character*6 AddedStr, AddEndOfOutputFile
+
+    !Инициализируем/сбрасываем переменные
+    count_num = 1
+    in_counter = 0
+    is_first=1
+
+    if (isTEST >= 2) write(333, *) 'Reading data about isotopes...'
+    curFile_KR = trim(CurDir)//'\'//trim(StepGlobal_STR)//'_kr.txt' !Kr - коэффициент неравномерности
+    curFile_KV = trim(CurDir)//'\'//trim(StepGlobal_STR)//'_KV.txt' !КВ - коэффициент воспроизводства
+
+
+    curFile = trim(CurDir)//'\'//trim(StepGlobal_STR)//'_mass'
+    curFile_CONC = trim(CurDir)//'\'//trim(StepGlobal_STR)//'_conc' !КОНЦЕНТРАЦИИ
+    AddedStr = AddEndOfOutputFile(count_num)
+    curFile_TEMP = trim(curFile)//trim(AddedStr)//'.txt'
+    curFile_CONC_TEMP = trim(curFile_CONC)//trim(AddedStr)//'.txt'
+    open (999,file=curFile_TEMP,status='unknown') !записываем массы соответствующие загружаемому, либо выгружаемомому топливу
+      write (999, *) '-----------------------------------'
+      write (999, *) 'MASSES OF ISOTOPES FOR ALL OF ZONES'
+      write (999, *) 'GLOBAL STEP = ',StepGlobal_STR
+      write (999, *) 'INSIDE TIME (IT) = ',count_num
+      write (999, *) '  IT = 1 => BEGIN OF STEP'
+      write (999, *) '  IT = 2 => END OF STEP'
+      write (999, *) '  IT = 3 => END OF STEP + COOLING'
+      write (999, *) '  IT = 4 => AFTER RECYCLING'
+    open (998,file=curFile_CONC_TEMP,status='unknown') !записываем массы соответствующие загружаемому, либо выгружаемомому топливу
+    open (997,file=curFile_KR,status='unknown') !коэффициент неравномерности Kr
+      write (997, *) 'Kr - КОЭФФИЦИЕНТ НЕРАВНОМЕРНОСТИ ПО V ПО ШАГАМ'
+    open (996,file=curFile_KV,status='unknown') !коэффициент воспроизводства KV
+      write (996, *) 'КВ - КОЭФФИЦИЕНТ ВОСПРОИЗВОДСТВА АКТИВНОЙ ЗОНЫ (АЗ) И РЕАКТОРА (Р-Р) ПО ШАГАМ, NC/NCF'
+      write (996, *) '   i      KVCore   KVreactor'
+
+    !if (isTEST >= 2) write(333, *) 'curFile_CONC_TEMP='//trim(curFile_CONC_TEMP)
+
+    open (5,file=trim(InpFileNameIn),status='unknown')
+
+    !Выделяем память для списка изотопов и их концентраций для дальнейшего сохранения
+    if (.not.allocated(conc_in)) allocate(conc_in(1:Ner1));
+    if (.not.allocated(isot_ids)) allocate(isot_ids(1:Ner1));
+    conc_in = conc_in(1:Ner1);
+    isot_ids = isot_ids(1:Ner1);
+    RECL_ERR_volume2 = 0
+
+10  read (5,'(a160)', end=15) StrFile1
+    if (StrFile1(1:26).eq.'                КОНЕЦ ШАГА') then      !нужно сменить файл, в который будем записывать данные, потому что это уже следующий шаг
+      is_first = 0
+      in_counter = in_counter + 1
+      !write(*,*) 'Finding after burnup, in_counter',in_counter
+      if (in_counter < NDTnum) then
+        goto 10 !пропускаем данные для шагов на момент работы реактора, нам нужен последний NDTnum шаг работы реактора
+      else
+      end if
+      close(999)
+      count_num = count_num + 1 !ищем следующее вхождение строки (на конец 1-го (330 суток) шага работы реактора, затем - на конец 30 суток, затем - на момент загрузки в следующий раз в реактор переработки)
+      AddedStr = AddEndOfOutputFile(count_num)
+      curFile_TEMP = trim(curFile)//trim(AddedStr)//'.txt'
+      open (999,file=curFile_TEMP,status='unknown') !записываем массы, соответствующие загружаемому, либо выгружаемомому топливу
+      curFile_CONC_TEMP = trim(curFile_CONC)//trim(AddedStr)//'.txt'
+      open (998,file=curFile_CONC_TEMP,status='unknown') !записываем концентрации, соответствующие загружаемому, либо выгружаемомому топливу
+
+      write (999, *) '-----------------------------------';
+      write (999, *) 'MASSES OF ISOTOPES FOR ALL OF ZONES';
+      write (999, *) 'GLOBAL STEP = ',StepGlobal;
+      write (999, *) 'INSIDE TIME (IT) = ',count_num;
+      write (999, *) '  IT = 1 => BEGIN OF STEP';
+      write (999, *) '  IT = 2 => END OF STEP';
+      write (999, *) '  IT = 3 => END OF STEP + COOLING';
+      write (999, *) '  IT = 4 => AFTER RECYCLING';
+    end if
+
+
+    !Сохраняем общую информацию
+    if (StrFile1(1:57).eq.'           ЗАГРУЗКА ДЕЛЯЩИХСЯ ИЗОТОПОВ ПО ЗОНАМ РЕАКТОРА') then
+      if (is_first == 0) then
+        if (in_counter < NDTnum) then
+          goto 10 !пропускаем данные для шагов на момент работы реактора, нам нужен последний NDTnum шаг работы реактора
+        end if
+      end if
+      write(999,*) '==========================================================================='
+      write(999,'(a160)') StrFile1
+      read (5,'(a160)') StrFile2 !
+      write(999,'(a160)') StrFile2
+      read (5,'(a160)') StrFile2 !                         АКТ.ЗОНА      БОК.ЭКРАН     ТОР.ЭКРАН      РЕАКТОР
+      write(999,'(a160)') StrFile2
+      read (5,'(a25,4f14.4)') str25, zero1, zero2, zero3, MassU235
+      write(999,'(a25,4f14.4)') str25, zero1, zero2, zero3, MassU235
+      read (5,'(a25,4f14.4)') str25, zero1, zero2, zero3, MassU238
+      write(999,'(a25,4f14.4)') str25, zero1, zero2, zero3, MassU238
+      read (5,'(a25,4f14.4)') str25, zero1, zero2, zero3, MassPuAll
+      write(999,'(a25,4f14.4)') str25, zero1, zero2, zero3, MassPuAll
+      read (5,'(a25,4f14.4)') str25, zero1, zero2, zero3, MassPu239and240
+      write(999,'(a25,4f14.4)') str25, zero1, zero2, zero3, MassPu239and240
+     ! write (999,'(i5 f15.4, f15.5, 4f14.4)') StepNumberIn, DaysBegin, KeffBegin, MassPuAll, MassPu239and240, MassU235, MassU238
+      write(999,*) '==========================================================================='
+      write(999,*)
+      write(999,*)
+      write(999,*)
+      goto 10
+    end if
+
+
+    !Сохраняем Kr - коэффициент неравномерности по объему активной зоны
+    if (StrFile1(1:31).eq.'   KOЭФФ.HEPABHOMEPHOCTИ ПО *V*') then
+      read (StrFile1,'(a63,f12.5)') str2, krv !f12.5 - вещественное число, которое занимает в файле 12 символов, а после точки идет 5 значащих цифр
+      write(997,'(i5, f12.5)') in_counter, krv
+    end if
+
+
+    !Сохраняем КВ - коэффициент воспроизводства активной зоны (АЗ) и реактора (Р-Р)
+    if (StrFile1(1:40).eq.'   КОЭФФ.ВОСПРОИЗВОДСТВА ( NC/NCF.АЗ  )=') then
+      read (StrFile1,'(a40,f12.5)') str2, KVcore !f12.5 - вещественное число, которое занимает в файле 12 символов, а после точки идет 5 значащих цифр
+    end if
+    if (StrFile1(1:40).eq.'                         ( NC/NCF.P-P )=') then
+      read (StrFile1,'(a40,f12.5)') str2, KVreactor
+      write(996,'(i5, 2f12.5)') in_counter, KVcore, KVreactor
+    end if
+
+
+
+
+    !если мы дошли до нужной нам зоны
+    if (StrFile1(1:10).eq.'      ЗОНА') then
+      read (5,'(a160)') StrFileDotted  ! считываем строку      ----------
+      if (StrFileDotted(1:16).NE.'      ----------') then  !если еслидующая строка не черточки, то это общие данные и они нам не нужны
+        goto 10
+      end if
+      if (is_first == 0) then
+        if (in_counter < NDTnum) then
+          goto 10 !пропускаем данные для шагов на момент работы реактора, нам нужен последний NDTnum шаг работы реактора
+        end if
+      end if
+      !if (isTEST >= 2) write(333, *) 'Finding ZONE: '//trim(StrFile1)
+      !if (isTEST >= 2) write(333, *) 'is_first=',is_first;
+      read (StrFile1,'(a10,I5)') Str10, NumZonIn
+      n = NumZonIn
+      !if (isTEST >= 2) write(333, *) 'Finding ZONE ',NumZonIn,' - OK'
+      write(999,*) '======================================='
+      write(998,*) '======================================='
+      !if (isTEST >= 2) write(333, *) 'curFile=',trim(curFile)
+      write(999,*) StrFile1
+      write(998,*) StrFile1
+
+      str2 = '.';
+      if (count_num == 4) then
+        if (isTEST >= 2) write(333, *) 'BEFORE RECL_nzon_type(',n,')=',RECL_nzon_type(n)
+      end if
+      if (RECL_nzon_type(n) == 2) then
+        str2 = ' - ZONE TO BE RECYCLED ON THIS STEP!!!'  !второй тип материалов должен быть переработан
+!        if (StepGlobal == 1) write (StrFile2,'(a15,I4)') 'Loaded on Step ', StepGlobal !на первом шаге всё-равно она новая
+      end if
+      if (RECL_nzon_type(n) == 3) then
+        str2 = ' - Constructive materials'  !конструкционные материалы
+      end if
+      if (RECL_nzon_type(n) == 5) then
+        str2 = ' - Constructive materials'  !использовать можно (освобожден после переработки)
+      end if
+      if (RECL_nzon_type(n) == 0) then
+        str2 = ' - Restricted to use (is in VRH now)'  !использовать нельзя (в данный момент находится во внутриреакторном хранилище)
+      end if
+      if (RECL_nzon_type(n) == 4) then
+        str2 = ' - NEW ZONE'  !4-й тип означает, что это - новый материал (либо новая ТВС, либо переработка)
+        !if (isTEST >= 2) write(333, *) trim(StrFile2)
+        !делаем перераспределение только в конце
+        !if (count_num == 4) then
+        !  if (n <= Nf) then
+        !    RECL_nzon_type(n) = 1
+        !  else
+        !    RECL_nzon_type(n) = 3
+        !  end if
+        !end if
+      end if
+      if (count_num == 4) then
+        if (isTEST >= 2) write(333, *) 'AFTER RECL_nzon_type(',n,')=',RECL_nzon_type(n)
+      end if
+      write (StrFile2,'(a15,I4)') 'Loaded on Step ', RECL_FizStepLoaded(n)
+      write(999,'(a6,I4,a150)') 'TYPE: ',RECL_nzon_type(n),str2
+      write(998,'(a6,I4,a150)') 'TYPE: ',RECL_nzon_type(n),str2
+      write(999,*) StrFile2  !'Loaded on Step ', StepGlobal
+      write(998,*) StrFile2
+      write(999,'(a16)') StrFileDotted
+      read (5,'(a160)') StrFile2  ! пропускаем строку                        NC            NF            ВЕС          АЛЬФА         СИГМА-C       СИГМА-F
+      write(999,'(a160)') StrFile2
+      do i=1,Ner1 !для каждого изотопа читаем его данные
+        read (5,'(a15, i3.3, 6e14.5)') str15, isot_id, isot_nc, isot_nf, isot_mass, isot_alfa, isot_sigma_c, isot_sigma_f
+        write (999,'(a15, i3.3, 6e14.5)') str15, isot_id, isot_nc, isot_nf, isot_mass, isot_alfa, isot_sigma_c, isot_sigma_f
+        atomic_mass = GetIsotopeAtomicMass(isot_id)
+        conc_in(i) = isot_mass*CONST_NA/(0.001*1E6*CONST_barn*atomic_mass) !Считаем концентрации для дальнейшего использования
+        isot_ids(i) = isot_id
+        !Вычисляем для проверки балансового соотношения массы (она не должна никуда деваться)
+        if ((isot_id == 235) .OR. (isot_id == 238) .OR. (isot_id == 236) .OR. (isot_id == 234)) then
+          if (count_num == 1) then
+            !загруженная масса на этом шаге
+            if (RECL_FizStepLoaded(NumZonIn) == StepGlobal) then
+              if (RECL_nzon_type(NumZonIn) == 1) then
+                MassDataU(StepGlobal)%mass_loaded = MassDataU(StepGlobal)%mass_loaded + isot_mass
+                if (isot_id == 234) then
+                  UVector_LOADED(StepGlobal)%U234 = UVector_LOADED(StepGlobal)%U234 + isot_mass
+                end if
+                if (isot_id == 235) then
+                  UVector_LOADED(StepGlobal)%U235 = UVector_LOADED(StepGlobal)%U235 + isot_mass
+                end if
+                if (isot_id == 236) then
+                  UVector_LOADED(StepGlobal)%U236 = UVector_LOADED(StepGlobal)%U236 + isot_mass
+                end if
+                if (isot_id == 238) then
+                  UVector_LOADED(StepGlobal)%U238 = UVector_LOADED(StepGlobal)%U238 + isot_mass
+                end if
+              end if
+            end if
+            !общая масса в АЗ в начале кампании
+            MassDataU(StepGlobal)%mass_before = MassDataU(StepGlobal)%mass_before + isot_mass
+          end if
+          if (count_num == 3) then
+            !общая масса в АЗ в конце кампании
+            MassDataU(StepGlobal)%mass_after = MassDataU(StepGlobal)%mass_after + isot_mass
+            if (isot_id == 234) UVector(StepGlobal)%U234 = UVector(StepGlobal)%U234 + isot_mass
+            if (isot_id == 235) UVector(StepGlobal)%U235 = UVector(StepGlobal)%U235 + isot_mass
+            if (isot_id == 236) UVector(StepGlobal)%U236 = UVector(StepGlobal)%U236 + isot_mass
+            if (isot_id == 238) UVector(StepGlobal)%U238 = UVector(StepGlobal)%U238 + isot_mass
+            !выгруженная масса на этом шаге для переработки
+            if (RECL_nzon_type(NumZonIn) == 2) then
+              MassDataU(StepGlobal)%mass_unloaded = MassDataU(StepGlobal)%mass_unloaded + isot_mass
+            end if
+          end if
+        end if
+!        if ((isot_id == 239) .OR. (isot_id == 240) .OR. (isot_id == 241) .OR. (isot_id == 242)) then
+        if ((isot_id == 239) .OR. (isot_id == 240) .OR. (isot_id == 241) .OR. (isot_id == 242) &
+        & .OR. (isot_id == 248) .OR. (isot_id == 246)) then
+          if (count_num == 1) then
+            !загруженная масса на этом шаге
+            if (RECL_FizStepLoaded(NumZonIn) == StepGlobal) then
+!              if ((RECL_nzon_type(NumZonIn) == 1).OR.(RECL_nzon_type(NumZonIn) == 2)) then
+              if (RECL_nzon_type(NumZonIn) == 1) then
+                MassDataPu(StepGlobal)%mass_loaded = MassDataPu(StepGlobal)%mass_loaded + isot_mass
+                if (isot_id == 246) then
+                  PuVector_LOADED(StepGlobal)%Pu236 = PuVector_LOADED(StepGlobal)%Pu236 + isot_mass
+                end if
+                if (isot_id == 248) then
+                  PuVector_LOADED(StepGlobal)%Pu238 = PuVector_LOADED(StepGlobal)%Pu238 + isot_mass
+                end if
+                if (isot_id == 239) then
+                  PuVector_LOADED(StepGlobal)%Pu239 = PuVector_LOADED(StepGlobal)%Pu239 + isot_mass
+                end if
+                if (isot_id == 240) then
+                  PuVector_LOADED(StepGlobal)%Pu240 = PuVector_LOADED(StepGlobal)%Pu240 + isot_mass
+                end if
+                if (isot_id == 241) then
+                  PuVector_LOADED(StepGlobal)%Pu241 = PuVector_LOADED(StepGlobal)%Pu241 + isot_mass
+                end if
+                if (isot_id == 242) then
+                  PuVector_LOADED(StepGlobal)%Pu242 = PuVector_LOADED(StepGlobal)%Pu242 + isot_mass
+                end if
+!               write (333, *) 'ЗОНА №',NumZonIn,' -> ',isot_id,'=',isot_mass
+              end if
+            end if
+            !общая масса в АЗ в начале кампании
+            MassDataPu(StepGlobal)%mass_before = MassDataPu(StepGlobal)%mass_before + isot_mass
+          end if
+          if (count_num == 3) then
+            !общая масса в АЗ в конце кампании
+            MassDataPu(StepGlobal)%mass_after = MassDataPu(StepGlobal)%mass_after + isot_mass
+            if (isot_id == 246) PuVector(StepGlobal)%Pu236 = PuVector(StepGlobal)%Pu236 + isot_mass
+            if (isot_id == 248) PuVector(StepGlobal)%Pu238 = PuVector(StepGlobal)%Pu238 + isot_mass
+            if (isot_id == 239) PuVector(StepGlobal)%Pu239 = PuVector(StepGlobal)%Pu239 + isot_mass
+            if (isot_id == 240) PuVector(StepGlobal)%Pu240 = PuVector(StepGlobal)%Pu240 + isot_mass
+            if (isot_id == 241) PuVector(StepGlobal)%Pu241 = PuVector(StepGlobal)%Pu241 + isot_mass
+            if (isot_id == 242) PuVector(StepGlobal)%Pu242 = PuVector(StepGlobal)%Pu242 + isot_mass
+            !выгруженная масса на этом шаге для переработки
+            if (RECL_nzon_type(NumZonIn) == 2) then
+              MassDataPu(StepGlobal)%mass_unloaded = MassDataPu(StepGlobal)%mass_unloaded + isot_mass
+            end if
+          end if
+        end if
+      end do
+      read (5,'(a160)') StrFile2  ! пропускаем строку   СУММА В ЗОНЕ
+      write(999,'(a160)') StrFile2
+      read (5,'(a160)') StrFile2  ! пропускаем строку   ------------------------------------------------------
+      write(999,'(a160)') StrFile2
+      read (5,'(a160)') StrFile2  ! пропускаем строку   BEC U-235
+      write(999,'(a160)') StrFile2
+      read (5,'(a160)') StrFile2  ! пропускаем строку   ВЕС U-238
+      write(999,'(a160)') StrFile2
+      read (5,'(a160)') StrFile2  ! пропускаем строку   ВЕС PU
+      write(999,'(a160)') StrFile2
+      read (5,'(a160)') StrFile2  ! пропускаем строку   ВЕС PU(9+1)
+      write(999,'(a160)') StrFile2
+      !читаем строку "ОБЪЁМ ЗОНЫ"
+      read (5,'(a16,1e16.5)') Str16, zone_volume
+      write(999,'(a16,1e16.5)') Str16, zone_volume
+      do i=1,Ner1
+        if (zone_volume.ne.0) then
+          conc_in(i) = conc_in(i)/zone_volume !теперь нам известен объем и мы можем получить окончательное значение концентраций в 1/(см*барн)
+        end if
+        write (998,'(i3.3, e14.5)') isot_ids(i), conc_in(i)
+      end do
+      !ОБРАБОТКА ОШИБОК: один раз считаем суммарный выгружаемый объём
+      if (count_num == 1) then
+        if (RECL_nzon_type(n) == 2) then
+          RECL_ERR_volume2 = RECL_ERR_volume2 + zone_volume
+        end if
+      end if
+      write(999,*)
+      write(999,*)
+      write(999,*)
+      write(998,*)
+      write(998,*)
+      write(998,*)
+      goto 10
+    else
+      goto 10
+    end if
+15  close(5)
+    close(999)
+    close(998)
+    deallocate(isot_ids)
+    deallocate(conc_in)
+
+    if (StepGlobal == 1) RECL_ERR_volume1 = RECL_ERR_volume2
+    if (isTEST >= 2) write(333, *) 'RECL_ERR_volume2=',RECL_ERR_volume2
+end subroutine
+

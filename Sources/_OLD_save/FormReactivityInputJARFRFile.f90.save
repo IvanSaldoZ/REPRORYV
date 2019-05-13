@@ -1,0 +1,114 @@
+!ФОРМИРУЕМ НОВЫЙ ВХОДНОЙ ФАЙЛ ДЛЯ JARFR ДЛЯ АНАЛИЗА ЭФФЕКТОВ РЕАКТИВНОСТИ
+subroutine FormReactivityInputJARFRFile
+    use CommonModJARFR
+    !счетчик новых ТВСок и новых УНИКАЛЬНЫХ ТВСок (т.е. тех номеров, которые ещё не были использованы)
+    integer AddNewTVSType, AddNewTVSUniqueType
+    !счетчик общего количества и уникальных номеров ТВСок, выгруженных на предыдущем шаге
+    integer MinusOneTVSCount
+    !То количество новых материалов (физических зон) и их уникальных номеров, которое мы должны добавить для фиксации выгуржаемых материалов в конце шага
+    integer AddMatsCount, AddMatsUniqueCount
+    !То количество новых и уникальных материалов (физических зон), которое мы должны добавить вместо выгруженных материалов на прыдыдущем шаге
+    integer AddMatsPreCount, AddMatsPreUniqueCount
+    !Новое/старое кол-во зон
+    integer NewMatsCount, OldMatsCount
+    !Массив номеров ТВС, которые мы хотим выгрузить, массив новых номеров ТВС
+    integer, allocatable :: RECL_TVSnumToReload(:), RECL_TVSnumToReload_TEMP(:), RECL_TVSnumCaption(:)
+    !Массив номеров ТВС, которые мы были выгружены на преыдудущем шаге
+    integer, allocatable :: RECL_TVSnumUnloaded(:), RECL_TVSnumUnloaded_TEMP(:)
+    !Массив номеров составов, которые мы хотим выгрузить
+    integer, allocatable :: RECL_FIZids(:), RECL_FIZids_BIG(:), RECL_FIZids_TEMP(:)
+    !Массив номеров составов, которые соответствуют тем, которые мы хотим выгрузить (соответствие между RECL_FIZids <-> RECL_FizNewIds)
+    integer, allocatable :: RECL_FizNewIds(:)
+    !Массив номеров составов, которые были выгружены на предыдущем шаге
+    integer, allocatable :: RECL_FIZolds(:), RECL_FIZolds_TEMP(:), RECL_FIZolds_BIG(:)
+    !Массив номеров составов, которые соответствуют тем, которые были выгружены (соответствие между RECL_FIZolds <-> RECL_FizNewOld)
+    integer, allocatable :: RECL_FizNewPre(:)
+    !есть ли в массиве такой элемент
+    logical isInArr
+    !Двухмерный массив KT
+    integer, allocatable :: KTx2(:,:), KTx2_ORIGINAL(:,:), KTx2_TEMP(:,:)
+    !Индекс, в который копируем номера составов или сами составы
+    integer newIndex
+    !Двухмерный массив AD - концентраций каждого из номеров составов
+    real, allocatable :: ADx2(:,:)
+    !Есть ли свободный неиспользуемый номер ТВСки для повтороного использования
+    logical isFreeToUse
+    !Новый индекс ТВСки/физической зоны для повторного использования
+    integer newTVSindex, newFIZindex
+    !Строка для формата вывода массивов NK и KT
+    character*50 :: FMT2, FMT3
+    !Имеется ли данная зона в активной зоне или её можно использовать
+    integer, allocatable :: FizZoneStatus_TEMP(:)
+    !Для чтения файла
+    character*11 Str11
+    character*250 Str250
+    !Имя файла с начальными концентрациями
+    character*250 curFile_CONC
+    !Номер читаемой зоны
+    integer NumZonIn, NumZonFound
+    !Внутренний идентификатор изотопа
+    integer IsotID
+    !Считанная концентрация
+    real ConcIn
+    !Перед удалением делаем копию массива Tem
+    real, allocatable :: Tem_Copy(:)
+    !Временная копия массива Ntnz
+    integer, allocatable :: Ntnz_temp(:)
+    !Строка для обработки файлов
+    character*6 AddedStr, AddEndOfOutputFile
+
+!    re_i = system('copy '//trim(inp_new_to_run)//'  1>>tmp 2>&1')
+    !re_i = system(trim(DelComm)//' '//inp_new//'  1>>tmp 2>&1')
+
+    if (DoplerOn.EQ.1) then
+      !копируем в файл inp_new_to_run_Dopler, чтобы потом его запустить
+      command = 'copy '//trim(inp_new_to_run)//' '//trim(inp_new_to_run)//'_Dopler 1>>tmp 2>&1'
+      re_i = system(command)
+      open(unt1, file = trim(inp_new_to_run)//'_Dopler', status = 'OLD')
+      !меняем температуру для делящихся на величину повышения температуры из файла REPRORYV
+      do i=1,Nf
+        Tem(i) = Tem(i) + DoplerDelta
+      end do
+      write(unt1, NML = Mim)
+      write(unt1, NML = D26)
+      write(unt1, NML = Dan)
+      write(unt1, NML = Obr)
+      write(unt1, NML = Upbn)
+      close(unt1)
+      !копируем, если у нас включен расчёт
+      command = 'copy '//trim(inp_new_to_run)//'_Dopler '// &
+      & 'recycle\'//trim(StepGlobal_STR)//'stp\'//trim(StepGlobal_STR)//'_input_Dopler.txt 1>>tmp 2>&1'
+      re_i = system(command)
+    end if !if (DoplerOn.EQ.1)
+
+
+
+    if (DensKoeffOn.EQ.1) then
+      !копируем в файл inp_new_to_run_Dopler, чтобы потом его запустить
+      command = 'copy '//trim(inp_new_to_run)//' '//trim(inp_new_to_run)//'_Dens 1>>tmp 2>&1'
+      re_i = system(command)
+      open(unt1, file = trim(inp_new_to_run)//'_Dens', status = 'OLD')
+      !меняем плотности в соответствии с входным файлом RERPR
+      k = 1
+      do i=1,M1
+        do j=1,Ner1
+          !ADx2(i,j) = Ad(k) !заполняем двухмерный массив концентрациями
+          Ad(k) = Ad(k)*DensChange(j)
+          k = k + 1
+        end do
+      end do
+      write(unt1, NML = Mim)
+      write(unt1, NML = D26)
+      write(unt1, NML = Dan)
+      write(unt1, NML = Obr)
+      write(unt1, NML = Upbn)
+      close(unt1)
+      !копируем, если у нас включен расчёт
+      command = 'copy '//trim(inp_new_to_run)//'_Dopler '// &
+      & 'recycle\'//trim(StepGlobal_STR)//'stp\'//trim(StepGlobal_STR)//'_input_Dopler.txt 1>>tmp 2>&1'
+      re_i = system(command)
+    end if !if (DensKoeffOn.EQ.1)
+
+
+
+end subroutine
